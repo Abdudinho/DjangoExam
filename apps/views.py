@@ -55,11 +55,9 @@ class PostCreateView(CustomLoginRequiredMixin, CreateView):
     success_url = reverse_lazy('home')
     form_class = PostModelForm
 
-
-def form_valid(self, form):
-    user = form.cleaned_data['user']
-    authenticate(user)
-    return super().form_valid(form)
+    def form_valid(self, form):
+        form.instance.author = self.request.user
+        return super().form_valid(form)
 
 
 class PostDetailView(CustomLoginRequiredMixin, DetailView):
