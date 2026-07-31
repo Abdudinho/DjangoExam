@@ -1,15 +1,21 @@
 from django.urls import path
-from django.views import View
 
-from apps.views import IndexTemplateView, PostDetailView, \
-    PostCreateView, register_view, DashboardView, LoginView
+from apps.views import *
 
 urlpatterns = [
-    path("auth/login", LoginView.as_view(), name="login"),
-    path("auth/register", register_view, name="register"),
-    path('', IndexTemplateView.as_view(), name="index"),
-    path("dashboard/", DashboardView.as_view(), name="dashboard"),
-    path('post/<int:pk>/', PostDetailView.as_view(), name='post_detail'),
-    path('post/create', PostCreateView.as_view(), name='post_create'),
+    path('', HomeListView.as_view(), name='home'),
 
+    path('login/', LoginFormView.as_view(), name='login'),
+
+    path('register/', RegisterFormView.as_view(), name='register'),
+
+    path('create-post/', PostCreateView.as_view(), name='create-post'),
+
+    path('logout/', logout_view, name='logout'),
+
+    path('delete-post/<int:id>', PostDeleteView.as_view(), name='delete-post'),
+
+    path('post-detail/<int:id>', PostDetailView.as_view(), name='post-detail'),
+
+    path('create-comment/<int:post_id>', CommentCreateView.as_view(), name='create-comment')
 ]

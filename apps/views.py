@@ -1,76 +1,100 @@
-from django.contrib import messages
-from django.contrib.auth import login, authenticate
-from django.contrib.auth.hashers import check_password, make_password
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
-from django.shortcuts import render, redirect
-from django.views import View
-from django.views.generic import TemplateView, DetailView, FormView, ListView
-
-from apps.forms import LoginForm
-from apps.models import User, Post
-
-
-from django.contrib.auth import login
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import authenticate, login, logout
+from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
-from django.views.generic import CreateView
+from django.views import View
+from django.views.generic import FormView, ListView, CreateView, DeleteView, DetailView
+
+from apps.forms import RegisterForm, LoginForm, PostModelForm, CommentModelForm
+from apps.mixin import AnonymousRequiredMixin, CustomLoginRequiredMixin
+from apps.models import *
+
+from apps.models import Post, Comment
 
 
-def register_view(request):
-    if request.method == 'POST':
-        first_name = request.POST.get('first_name')
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        confirm_password = request.POST.get('confirm_password')
-        if password != confirm_password:
-            return redirect('register')
-        if User.objects.filter(first_name=first_name).exists():
-            return redirect("register")
-        hashed_password = make_password(password)
-        User.objects.create_user(username=username, password=hashed_password, first_name=first_name)
-        return render(request, 'login.html', {"position": "login"})
-    else:
-        return render(request, 'register.html', {"position": "register"})
+class RegisterFormView(AnonymousRequiredMixin, FormView):
+    template_name = 'register.html'
+    success_url = reverse_lazy('login')
+    form_class = RegisterForm
+
+    def form_valid(self, form):
+        user = form.cleaned_data['user']
+        authenticate(user)
+        return super().form_valid(form)
+
+class LoginFormView(AnonymousRequiredMixin, FormView):
+    template_name = 'login.html'
+    success_url = reverse_lazy('home')
+    form_class = LoginForm
+
+    def form_valid(self, form):
+        user = form.cleaned_data['user']
+        login(self.request, user)
+        return super().form_valid(form)
 
 
-class LoginView(View):
-    template_name = "login.html"
-
-    def get(self, request):
-        return render(request, self.template_name)
-
-    def post(self, request):
-        email = request.POST.get("email")
-        password = request.POST.get("password")
-        user = authenticate(request, username=email, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect("dashboard")
-        messages.error(request, "Email yoki parol noto'g'ri")
-        return render(request, self.template_name)
+def logout_view(request):
+    logout(request)
+    return redirect('login')
 
 
-class DashboardView(LoginRequiredMixin, TemplateView):
-    template_name = "dashboard.html"
-    login_url = "login"
-
-class IndexTemplateView(TemplateView):
+class HomeListView(CustomLoginRequiredMixin, ListView):
     template_name = 'dashboard.html'
+    queryset = Post.objects.all()
+    context_object_name = 'posts'
 
-    def get_context_data(self, **kwargs):
-        data = super().get_context_data()
-        data['page'] = self.request.GET.get("page")
-        return data
+class PostDeleteView(CustomLoginRequiredMixin, DeleteView):
+    queryset = Post.objects.all()
+    template_name = 'dashboard.html'
+    success_url = reverse_lazy('home')
+    pk_url_kwarg = 'id'
 
-class PostDetailView(DetailView):
-    model = Post
+
+
+class PostCreateView(CustomLoginRequiredMixin, CreateView):
+    template_name = 'create_post.html'
+    success_url = reverse_lazy('home')
+    form_class = PostModelForm
+
+
+def form_valid(self, form):
+    user = form.cleaned_data['user']
+    authenticate(user)
+    return super().form_valid(form)
+
+
+class PostDetailView(CustomLoginRequiredMixin, DetailView):
+    queryset = Post.objects.all()
+    pk_url_kwarg = 'id'
     template_name = 'post_detail.html'
     context_object_name = 'post'
 
-class PostCreateView(LoginRequiredMixin, CreateView):
-    model = User
-    template_name = 'create_post.html'
-    fields = ['title','content', 'is_published','views','author','created_at','updated_at']
-    success_url = reverse_lazy('dashboard')
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
 
+        post = self.object
+
+        comments = Comment.objects.filter(
+            post=post
+        )
+
+        context['comments'] = comments
+
+        return context
+
+class CommentCreateView(CustomLoginRequiredMixin, CreateView):
+    template_name = 'post_detail.html'
+    form_class = CommentModelForm
+    pk_url_kwarg = 'post_id'
+
+    def form_valid(self, form):
+        current_post_id = self.kwargs.get(self.pk_url_kwarg)
+
+        post_object = get_object_or_404(Post, id = current_post_id)
+
+        form.instance.post = post_object
+        form.instance.author = self.request.user
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        current_post_id = self.kwargs.get(self.pk_url_kwarg)
+        return reverse_lazy('post-detail', kwargs={'id': current_post_id})
